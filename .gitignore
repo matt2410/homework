@@ -53,3 +53,87 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rm/
+[Aa]rm64/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio Code
+.vscode/
+
+# Rider / ReSharper
+.idea/
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+project.assets.json
+project.nuget.cache
+
+# Test results
+TestResults/
+*.trx
+
+# Coverage
+coverage/
+coverage.xml
+
+# Logs
+*.log
+
+# Generated files
+Generated/
+*.generated.cs
+
+# Publish output
+publish/
+*.publishsettings
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# User-specific settings
+*.rsuser
+
+# ASP.NET / .NET local files
+appsettings.Local.json
+appsettings.Development.local.json
+
+# Secrets / environment files
+.env
+.env.*
+!.env.example
+
+# Azure Functions local settings
+local.settings.json
