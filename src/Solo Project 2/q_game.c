@@ -1,7 +1,12 @@
 #include "q_game.h"
 #include "cprocessing.h"
 
+/* Font used by the in-game status and collision messages. */
 CP_Font text;
+
+#define SPEED_STEP 25.0f
+#define MIN_ACTOR_SPEED 50.0f
+#define MAX_ACTOR_SPEED 800.0f
 
 typedef struct Actor
 {
@@ -16,6 +21,9 @@ static Actor actor1;
 static Actor actor2;
 static CP_BOOL collisionLatched = FALSE;
 
+/* Reads directional input, normalizes it, updates velocity at actor->speed,
+ * and integrates the actor position using frame delta time. When no direction
+ * key is held, the actor keeps its previous velocity. */
 static void updateActor(
     Actor* actor,
     float dt,
@@ -47,6 +55,8 @@ static void updateActor(
     actor->position = CP_Vector_Add(actor->position, displacement);
 }
 
+/* Keeps an actor inside the client area. On contact with an edge, the actor is
+ * moved back to a legal position and the relevant velocity component is reversed. */
 static void keepActorOnScreen(Actor* actor)
 {
     float width = (float)CP_System_GetWindowWidth();
@@ -75,6 +85,8 @@ static void keepActorOnScreen(Actor* actor)
     }
 }
 
+/* Returns TRUE when two circular actors touch or overlap by comparing the
+ * center distance with the sum of their radii. */
 static CP_BOOL actorsCollide(const Actor* a, const Actor* b)
 {
     float centerDistance = CP_Vector_Distance(a->position, b->position);
@@ -82,27 +94,8 @@ static CP_BOOL actorsCollide(const Actor* a, const Actor* b)
     return centerDistance <= minimumDistance;
 }
 
-//static void drawActor(const Actor* actor)
-//{
-//    CP_Settings_NoStroke();
-//    CP_Settings_Fill(actor->color);
-//
-//    /* DrawCircle expects center x/y and diameter. */
-//    CP_Graphics_DrawCircle(
-//        actor->position.x,
-//        actor->position.y,
-//        actor->radius * 2.0f);
-//
-//    /* Draw a short line to visualize the velocity direction. */
-//    CP_Settings_Stroke(CP_Color_Create(255, 255, 255, 255));
-//    CP_Settings_StrokeWeight(3.0f);
-//    CP_Graphics_DrawLine(
-//        actor->position.x,
-//        actor->position.y,
-//        actor->position.x + actor->velocity.x * 0.25f,
-//        actor->position.y + actor->velocity.y * 0.25f);
-//}
-
+/* Draws an actor as a colored circle with a white direction triangle. The
+ * triangle uses normalized velocity, so its size is independent of speed. */
 static void drawActor(const Actor* actor)
 {
     CP_Vector direction;
@@ -204,6 +197,7 @@ static void drawActor(const Actor* actor)
         triangleRight.y);
 }
 
+/* Draws a centered red warning while the circular actors overlap. */
 static void drawCollisionAlert(void)
 {
     //return CP_Engine_Terminate();
@@ -217,6 +211,34 @@ static void drawCollisionAlert(void)
     CP_Font_DrawText("COLLISION!", centerX, 55.0f);
 }
 
+
+/* Restricts a requested actor speed to the safe, visible gameplay range. */
+static float clampActorSpeed(float speed)
+{
+    if (speed < MIN_ACTOR_SPEED) return MIN_ACTOR_SPEED;
+    if (speed > MAX_ACTOR_SPEED) return MAX_ACTOR_SPEED;
+    return speed;
+}
+
+/* Processes one-shot real-time speed changes. Q/E control actor 1 and O/P
+ * control actor 2. Existing velocity is rescaled immediately while preserving
+ * direction, so the change is visible even if no movement key is held. */
+static void updateSpeedControls(void)
+{
+    float oldSpeed1 = actor1.speed;
+    float oldSpeed2 = actor2.speed;
+    if (CP_Input_KeyTriggered(KEY_Q)) actor1.speed = clampActorSpeed(actor1.speed - SPEED_STEP);
+    if (CP_Input_KeyTriggered(KEY_E)) actor1.speed = clampActorSpeed(actor1.speed + SPEED_STEP);
+    if (CP_Input_KeyTriggered(KEY_O)) actor2.speed = clampActorSpeed(actor2.speed - SPEED_STEP);
+    if (CP_Input_KeyTriggered(KEY_P)) actor2.speed = clampActorSpeed(actor2.speed + SPEED_STEP);
+    if (oldSpeed1 != actor1.speed && CP_Vector_Length(actor1.velocity) > 0.0f)
+        actor1.velocity = CP_Vector_Scale(CP_Vector_Normalize(actor1.velocity), actor1.speed);
+    if (oldSpeed2 != actor2.speed && CP_Vector_Length(actor2.velocity) > 0.0f)
+        actor2.velocity = CP_Vector_Scale(CP_Vector_Normalize(actor2.velocity), actor2.speed);
+}
+
+/* Allocates the font, configures the window, and resets both actors and the
+ * collision latch to deterministic starting values. */
 static void init(void)
 {
 
@@ -241,6 +263,8 @@ static void init(void)
     collisionLatched = FALSE;
 }
 
+/* Executes one frame: clear, process speed and movement input, constrain actors,
+ * resolve the first overlap frame, draw the scene/HUD, and handle Escape. */
 static void update(void)
 {
     float dt;
@@ -248,6 +272,7 @@ static void update(void)
 
     CP_Graphics_ClearBackground(CP_Color_Create(24, 28, 38, 255));
     dt = CP_System_GetDt();
+    updateSpeedControls();
 
     updateActor(
         &actor1,
@@ -292,19 +317,22 @@ static void update(void)
     CP_Settings_TextAlignment(
         CP_TEXT_ALIGN_H_LEFT,
         CP_TEXT_ALIGN_V_TOP);
-    CP_Font_DrawText("Actor 1: W A S D    Actor 2: Arrow Keys", 20.0f, 18.0f);
+    CP_Font_DrawText("Actor 1: WASD, Q/E speed    Actor 2: Arrows, O/P speed", 20.0f, 18.0f);
 
     if (CP_Input_KeyTriggered(KEY_ESCAPE))
         CP_Engine_Terminate();
 }
 
+/* Releases the font loaded by init when this state ends. */
 static void exit(void)
 {
     /* No dynamically loaded images, sounds, or fonts in this sample. */
     CP_Font_Free(text);
 }
 
-int start_q_game()
+/* Registers this demo state with CProcessing, runs the engine, and returns zero
+ * after normal shutdown. */
+int start_q_game(void)
 {
     CP_Engine_SetNextGameState(init, update, exit);
     CP_Engine_Run(0);

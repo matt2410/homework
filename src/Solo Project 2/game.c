@@ -6,7 +6,10 @@
 
 /* ================= HẰNG SỐ (chỉnh ở đây để đổi độ khó của NPC) ================= */
 #define CHARACTER_RADIUS 30.0f   /* bán kính của mỗi nhân vật                       */
-#define MOVE_SPEED       300.0f  /* tốc độ di chuyển (pixel / giây)                 */
+#define INITIAL_MOVE_SPEED 300.0f /* starting speed in pixels per second */
+#define SPEED_STEP         25.0f  /* amount added or removed per key press */
+#define MIN_MOVE_SPEED     50.0f  /* prevents a character from stopping or reversing */
+#define MAX_MOVE_SPEED     800.0f /* upper safety limit for controllable movement */
 #define EDGE_MARGIN      5.0f    /* chừa lề 5px quanh cửa sổ (giống code cũ)        */
 #define NPC_LOOKAHEAD    15.0f   /* NPC "nhìn trước" 15px để thử bước đi kế tiếp    */
 #define NPC_AVOID_DIST   160.0f  /* trong vòng 160px quanh player, NPC không chịu đi lại gần thêm */
@@ -36,6 +39,10 @@ CP_Color colorDir;   /* màu trắng của hình tam giác */
 float width;         /* chú ý: đây là CHIỀU CAO cửa sổ (giữ nguyên tên cũ của bạn) */
 float length;        /* chú ý: đây là CHIỀU RỘNG cửa sổ */
 
+/* Runtime-adjustable speeds. These follow player/NPC roles when characters are swapped. */
+static float playerSpeed = INITIAL_MOVE_SPEED;
+static float npcSpeed = INITIAL_MOVE_SPEED;
+
 
 /* ================= HÀM HỖ TRỢ ================= */
 
@@ -61,14 +68,36 @@ static CP_Vector get_direction(int dirIndex)
 	return direction_up;
 }
 
+
+/* Clamps a speed to the supported runtime range. */
+static float clamp_speed(float speed)
+{
+	if (speed < MIN_MOVE_SPEED) return MIN_MOVE_SPEED;
+	if (speed > MAX_MOVE_SPEED) return MAX_MOVE_SPEED;
+	return speed;
+}
+
+/* Handles one-shot speed controls. Z/X change the controlled player speed,
+ * while N/M change the NPC speed. KeyTriggered ensures one step per press. */
+static void update_speed_controls(void)
+{
+	if (CP_Input_KeyTriggered(KEY_Z)) playerSpeed = clamp_speed(playerSpeed - SPEED_STEP);
+	if (CP_Input_KeyTriggered(KEY_X)) playerSpeed = clamp_speed(playerSpeed + SPEED_STEP);
+	if (CP_Input_KeyTriggered(KEY_N)) npcSpeed = clamp_speed(npcSpeed - SPEED_STEP);
+	if (CP_Input_KeyTriggered(KEY_M)) npcSpeed = clamp_speed(npcSpeed + SPEED_STEP);
+}
+
 /* ================= PLAYER (giữ nguyên logic cũ) ================= */
 
+/* Normalizes player input, applies playerSpeed, integrates motion using delta time,
+ * and returns the updated position. Normalization prevents diagonal input from
+ * moving faster than single-axis input. */
 static CP_Vector draw_movement_for_player(CP_Vector direction, CP_Vector character)
 {
 	if (CP_Vector_Length(direction) > 0.0f)
 	{
 		direction = CP_Vector_Normalize(direction);
-		direction = CP_Vector_Scale(direction, MOVE_SPEED);
+		direction = CP_Vector_Scale(direction, playerSpeed);
 	}
 
 	character = CP_Vector_Add(character, CP_Vector_Scale(direction, dt));
@@ -230,6 +259,9 @@ void Game_Init(void)
 	length = (float)CP_System_GetWindowWidth();
 	width = (float)CP_System_GetWindowHeight();
 
+	playerSpeed = INITIAL_MOVE_SPEED;
+	npcSpeed = INITIAL_MOVE_SPEED;
+
 	direction_down = CP_Vector_Set(0.0f, 1.0f);
 	direction_up = CP_Vector_Set(0.0f, -1.0f);
 	direction_left = CP_Vector_Set(-1.0f, 0.0f);
@@ -251,6 +283,9 @@ void Game_Update(void)
 
 	CP_Graphics_ClearBackground(CP_Color_Create(245, 240, 176, 200));
 
+	/* Apply speed changes before movement so they affect the current frame. */
+	update_speed_controls();
+
 	/* --- 1. Click chuột để đổi nhân vật (PHẦN MỚI) --- */
 	if (CP_Input_MouseTriggered(MOUSE_BUTTON_LEFT))
 	{
@@ -269,11 +304,16 @@ void Game_Update(void)
 	character1 = draw_movement_for_player(directionForPlayer, character1);
 
 	directionForNpc = direction_for_npc(CHARACTER_RADIUS, character2, directionForNpc, character1);
-	character2 = movement_for_npc(character2, directionForNpc, MOVE_SPEED);
+	character2 = movement_for_npc(character2, directionForNpc, npcSpeed);
 
 	/* --- 3. Vẽ: NPC vẽ TRƯỚC (nằm dưới), player vẽ SAU (nằm trên) --- */
 	drawNpc(color2, character2, CHARACTER_RADIUS, rotationNpc);
 	drawNpc(color1, character1, CHARACTER_RADIUS, rotation);
+
+	/* Display controls and current speeds for immediate feedback. */
+	CP_Settings_Fill(CP_Color_Create(30, 30, 30, 255));
+	CP_Settings_TextSize(18.0f);
+	CP_Font_DrawText("Player speed: Z/X    NPC speed: N/M    Q: Menu", 20.0f, 25.0f);
 
 	if (CP_Input_KeyTriggered(KEY_Q))
 	{
